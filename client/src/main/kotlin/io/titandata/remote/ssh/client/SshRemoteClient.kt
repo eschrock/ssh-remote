@@ -37,16 +37,16 @@ class SshRemoteClient : RemoteClient {
     override fun parseUri(uri: URI, additionalProperties: Map<String, String>): Map<String, Any> {
         val (username, password, host, port, rawPath) = util.getConnectionInfo(uri)
 
-        if (username == null) {
-            throw IllegalArgumentException("Missing username in SSH remote")
-        }
-
         if (rawPath == null) {
             throw IllegalArgumentException("Missing path in SSH remote")
         }
 
         if (host == null) {
             throw IllegalArgumentException("Missing host in SSH remote")
+        }
+
+        if (username == null) {
+            throw IllegalArgumentException("Missing username in SSH remote")
         }
 
         val path = when {

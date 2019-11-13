@@ -82,6 +82,12 @@ class SshRemoteClientTest : StringSpec() {
             }
         }
 
+        "missing host fials" {
+            shouldThrow<IllegalArgumentException> {
+                client.parseUri(URI("ssh:///path"), emptyMap())
+            }
+        }
+
         "plain ssh provider fails" {
             shouldThrow<IllegalArgumentException> {
                 client.parseUri(URI("ssh"), emptyMap())
