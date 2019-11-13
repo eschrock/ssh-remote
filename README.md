@@ -1,6 +1,7 @@
-# About this Project
+# Titan SSH Provider
 
-Describe the project for users.
+This is a basic Titan SSH provider. For more information on how it works,
+consult the titan documentation.
 
 ## Contributing
 
