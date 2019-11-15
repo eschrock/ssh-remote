@@ -148,6 +148,13 @@ class SshRemoteClientTest : StringSpec() {
             parameters["keyFile"] shouldBe "keyfile"
         }
 
+        "SSH remote with port as double succeeds" {
+            val (uri, parameters) = client.toUri(mapOf("username" to "username", "address" to "host",
+                    "path" to "/path", "port" to 812.0))
+            uri shouldBe "ssh://username@host:812/path"
+            parameters.size shouldBe 0
+        }
+
         "get basic SSH get parameters succeeds" {
             val params = client.getParameters(mapOf("username" to "username", "address" to "host",
                     "path" to "/path", "password" to "pass"))

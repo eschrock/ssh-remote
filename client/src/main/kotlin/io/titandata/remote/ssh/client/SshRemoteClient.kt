@@ -86,7 +86,12 @@ class SshRemoteClient : RemoteClient {
         }
         uri += "@${properties["address"]}"
         if (properties["port"] != null) {
-            uri += ":${properties["port"]}"
+            val port = if (properties["port"] is Double) {
+                (properties["port"] as Double).toInt()
+            } else {
+                properties["port"]
+            }
+            uri += ":$port"
         }
         if (!(properties["path"] as String).startsWith("/")) {
             uri += "/~/"

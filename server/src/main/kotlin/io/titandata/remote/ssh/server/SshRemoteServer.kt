@@ -2,6 +2,7 @@ package io.titandata.remote.ssh.server
 
 import com.google.gson.GsonBuilder
 import com.google.gson.reflect.TypeToken
+import io.titandata.remote.RemoteOperation
 import io.titandata.remote.RemoteServer
 import io.titandata.remote.RemoteServerUtil
 import io.titandata.shell.CommandException
@@ -15,6 +16,56 @@ class SshRemoteServer : RemoteServer {
     internal val executor = CommandExecutor()
     internal val gson = GsonBuilder().create()
     internal val util = RemoteServerUtil()
+
+    /**
+     * Validate remote configuration. Required parameters include (username, address, path). Optional parameters include
+     * (password, port, keyFile). For the port, we have to
+     */
+    override fun validateRemote(remote: Map<String, Any>): Map<String, Any> {
+        val validated = mutableMapOf<String, Any>()
+        for (prop in listOf("username", "address", "path")) {
+            if (!remote.containsKey(prop)) {
+                throw IllegalArgumentException("missing required remote property '$prop")
+            }
+            validated[prop] = remote[prop]!!.toString()
+        }
+
+        for (prop in listOf("password", "port", "keyFile")) {
+            if (remote.containsKey(prop)) {
+                if (prop == "port") {
+                    val port = if (remote[prop] is Double) {
+                        (remote[prop] as Double).toInt()
+                    } else if (remote[prop] is Int) {
+                        remote[prop] as Int
+                    } else {
+                        throw IllegalArgumentException("port must be a number or integer")
+                    }
+                    validated[prop] = port
+                } else {
+                    validated[prop] = remote[prop]!!.toString()
+                }
+            }
+        }
+
+        for (prop in remote.keys) {
+            if (!validated.containsKey(prop)) {
+                throw IllegalArgumentException("invalid property '$prop'")
+            }
+        }
+        return validated
+    }
+
+    /**
+     * Validate parameters, which can optionall contain either (password, key)
+     */
+    override fun validateParameters(parameters: Map<String, Any>): Map<String, Any> {
+        for (prop in parameters.keys) {
+            if (prop != "password" && prop != "key") {
+                throw IllegalArgumentException("invalid property '$prop'")
+            }
+        }
+        return parameters
+    }
 
     /**
      * This method will parse the remote configuration and parameters to determine if we should use password
@@ -118,5 +169,17 @@ class SshRemoteServer : RemoteServer {
         }
 
         return util.sortDescending(commits)
+    }
+
+    override fun endOperation(operation: RemoteOperation, isSuccessful: Boolean) {
+        throw NotImplementedError()
+    }
+
+    override fun startOperation(operation: RemoteOperation) {
+        throw NotImplementedError()
+    }
+
+    override fun syncVolume(operation: RemoteOperation, volumeName: String, volumeDescription: String, volumePath: String, scratchPath: String) {
+        throw NotImplementedError()
     }
 }
