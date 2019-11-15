@@ -21,8 +21,8 @@ import io.mockk.verify
 import io.titandata.shell.CommandException
 import io.titandata.shell.CommandExecutor
 import java.io.File
-import java.lang.IllegalArgumentException
 import java.nio.file.Files
+import kotlin.IllegalArgumentException
 
 class SshRemoteServerTest : StringSpec() {
     @MockK
@@ -54,6 +54,62 @@ class SshRemoteServerTest : StringSpec() {
     init {
         "get provider returns ssh" {
             client.getProvider() shouldBe "ssh"
+        }
+
+        "validate remote succeeds with only required fields" {
+            val result = client.validateRemote(mapOf("username" to "user", "path" to "/path", "address" to "host"))
+            result["username"] shouldBe "user"
+            result["path"] shouldBe "/path"
+            result["address"] shouldBe "host"
+        }
+
+        "validate remote fails if required field is missing" {
+            shouldThrow<IllegalArgumentException> {
+                client.validateRemote(mapOf("username" to "user", "address" to "host"))
+            }
+        }
+
+        "validate remote succeeds with all optional fields" {
+            val result = client.validateRemote(mapOf("username" to "user", "path" to "/path", "address" to "host",
+                    "keyFile" to "/keyfile", "password" to "pass", "port" to 8022))
+            result["username"] shouldBe "user"
+            result["path"] shouldBe "/path"
+            result["address"] shouldBe "host"
+            result["password"] shouldBe "pass"
+            result["keyFile"] shouldBe "/keyfile"
+            result["port"] shouldBe 8022
+        }
+
+        "validate remote converts port" {
+            val result = client.validateRemote(mapOf("username" to "user", "path" to "/path", "address" to "host",
+                    "port" to 8022.0))
+            result["port"] shouldBe 8022
+        }
+
+        "validate remote fails with bad port" {
+            shouldThrow<IllegalArgumentException> {
+                client.validateRemote(mapOf("username" to "user", "path" to "/path", "address" to "host",
+                        "port" to "p"))
+            }
+        }
+
+        "validate remote fails with invalid property" {
+            shouldThrow<IllegalArgumentException> {
+                client.validateRemote(mapOf("username" to "user", "path" to "/path", "address" to "host",
+                        "portz" to "p"))
+            }
+        }
+
+        "validate params succeeds" {
+            val params = client.validateParameters(mapOf("password" to "password", "key" to "key"))
+            params["password"] shouldBe "password"
+            params["key"] shouldBe "key"
+        }
+
+        "validate params fails for unknown property" {
+            shouldThrow<IllegalArgumentException> {
+                client.validateParameters(mapOf("password" to "password", "key" to "key", "keyz" to "key"))
+            }
         }
 
         "ssh auth fails if neither password nor key is specified in parameters" {
