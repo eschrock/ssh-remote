@@ -141,7 +141,9 @@ class SshRemoteServer : RemoteServer {
     override fun getCommit(remote: Map<String, Any>, parameters: Map<String, Any>, commitId: String): Map<String, Any>? {
         try {
             val json = runSsh(remote, parameters, "cat", "${remote["path"]}/$commitId/metadata.json")
-            return gson.fromJson(json, object : TypeToken<Map<String, Any>>() {}.type)
+            val result : Map<String, Any> = gson.fromJson(json, object : TypeToken<Map<String, Any>>() {}.type)
+            @Suppress("UNCHECKED_CAST")
+            return result.get("properties") as Map<String, Any>
         } catch (e: CommandException) {
             if (e.output.contains("No such file or directory")) {
                 return null
