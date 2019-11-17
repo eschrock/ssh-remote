@@ -1,6 +1,11 @@
+/*
+ * Copyright The Titan Project Contributors.
+ */
+
 package io.titandata.remote.ssh.server
 
 import io.kotlintest.TestCase
+import io.kotlintest.TestCaseOrder
 import io.kotlintest.TestResult
 import io.kotlintest.shouldBe
 import io.kotlintest.shouldNotBe
@@ -17,10 +22,16 @@ import io.mockk.just
 import io.mockk.mockk
 import io.mockk.mockkStatic
 import io.mockk.slot
+import io.mockk.spyk
 import io.mockk.verify
+import io.titandata.remote.RemoteOperation
+import io.titandata.remote.RemoteOperationType
+import io.titandata.remote.RemoteProgress
 import io.titandata.shell.CommandException
 import io.titandata.shell.CommandExecutor
+import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.IOException
 import java.nio.file.Files
 import kotlin.IllegalArgumentException
 
@@ -40,6 +51,16 @@ class SshRemoteServerTest : StringSpec() {
         clearAllMocks()
     }
 
+    val operation = RemoteOperation(
+            updateProgress = { _: RemoteProgress, _: String?, _: Int? -> Unit },
+            remote = mapOf("username" to "user", "address" to "host", "path" to "/path"),
+            parameters = mapOf("password" to "password"),
+            operationId = "operation",
+            commitId = "commit",
+            type = RemoteOperationType.PUSH,
+            data = null
+    )
+
     private fun mockFile(): File {
         mockkStatic("kotlin.io.FilesKt__FileReadWriteKt")
         mockkStatic(Files::class)
@@ -50,6 +71,8 @@ class SshRemoteServerTest : StringSpec() {
         every { Files.setPosixFilePermissions(any(), any()) } returns mockk()
         return file
     }
+
+    override fun testCaseOrder() = TestCaseOrder.Random
 
     init {
         "get provider returns ssh" {
@@ -193,7 +216,7 @@ class SshRemoteServerTest : StringSpec() {
         }
 
         "get commit returns correct metadata" {
-            every { executor.exec(*anyVararg()) } returns "{\"id\":\"id\",\"properties\":{\"a\":\"b\"}}"
+            every { executor.exec(*anyVararg()) } returns "{\"a\":\"b\"}"
             val result = server.getCommit(mapOf("username" to "user", "address" to "host", "password" to "password"), emptyMap(), "id")
             result shouldNotBe null
             result!!["a"] shouldBe "b"
@@ -218,10 +241,10 @@ class SshRemoteServerTest : StringSpec() {
                     "-o", "UserKnownHostsFile=/dev/null", "root@localhost", "ls", "-1", "/var/tmp") } returns "a\nb\n"
             every { executor.exec("sshpass", "-f", any(), "ssh", "-o", "StrictHostKeyChecking=no",
                     "-o", "UserKnownHostsFile=/dev/null", "root@localhost", "cat", "/var/tmp/a/metadata.json") } returns
-                    "{\"id\":\"a\",\"properties\":{\"timestamp\":\"2019-09-20T13:45:36Z\"}}"
+                    "{\"timestamp\":\"2019-09-20T13:45:36Z\"}"
             every { executor.exec("sshpass", "-f", any(), "ssh", "-o", "StrictHostKeyChecking=no",
                     "-o", "UserKnownHostsFile=/dev/null", "root@localhost", "cat", "/var/tmp/b/metadata.json") } returns
-                    "{\"id\":\"a\",\"properties\":{\"timestamp\":\"2019-09-20T13:45:37Z\"}}"
+                    "{\"timestamp\":\"2019-09-20T13:45:37Z\"}"
             val result = server.listCommits(mapOf("username" to "root", "password" to "password", "address" to "localhost", "path" to "/var/tmp"), emptyMap(), emptyList())
             result.size shouldBe 2
             result[0].first shouldBe "b"
@@ -233,10 +256,10 @@ class SshRemoteServerTest : StringSpec() {
                     "-o", "UserKnownHostsFile=/dev/null", "root@localhost", "ls", "-1", "/var/tmp") } returns "a\nb\n"
             every { executor.exec("sshpass", "-f", any(), "ssh", "-o", "StrictHostKeyChecking=no",
                     "-o", "UserKnownHostsFile=/dev/null", "root@localhost", "cat", "/var/tmp/a/metadata.json") } returns
-                    "{\"id\":\"a\",\"properties\":{\"tags\":{\"c\":\"d\"}}}"
+                    "{\"tags\":{\"c\":\"d\"}}"
             every { executor.exec("sshpass", "-f", any(), "ssh", "-o", "StrictHostKeyChecking=no",
                     "-o", "UserKnownHostsFile=/dev/null", "root@localhost", "cat", "/var/tmp/b/metadata.json") } returns
-                    "{\"id\":\"b\",\"properties\":{}}"
+                    "{}"
             val result = server.listCommits(mapOf("username" to "root", "password" to "password", "address" to "localhost", "path" to "/var/tmp"), emptyMap(), listOf("c" to null))
             result.size shouldBe 1
             result[0].first shouldBe "a"
@@ -251,6 +274,70 @@ class SshRemoteServerTest : StringSpec() {
 
             val result = server.listCommits(mapOf("username" to "root", "password" to "password", "address" to "localhost", "path" to "/var/tmp"), emptyMap(), emptyList())
             result.size shouldBe 0
+        }
+
+        "write file succeeds" {
+            val spy = spyk(server)
+            every { spy.buildSshCommand(any(), any(), any(), any(), *anyVararg()) } returns emptyList()
+            val process: Process = mockk()
+            every { executor.start(*anyVararg()) } returns process
+            every { executor.checkResult(any()) } just Runs
+            val output = ByteArrayOutputStream()
+            every { process.outputStream } returns output
+            every { process.isAlive } returns false
+            every { process.waitFor(any(), any()) } returns true
+
+            spy.writeFileSsh(emptyMap(), emptyMap(), "/path", "content")
+
+            output.toString() shouldBe "content"
+        }
+
+        "write file fails on timeout" {
+            val spy = spyk(server)
+            every { spy.buildSshCommand(any(), any(), any(), any(), *anyVararg()) } returns emptyList()
+            val process: Process = mockk()
+            every { executor.start(*anyVararg()) } returns process
+            every { executor.checkResult(any()) } just Runs
+            val output = ByteArrayOutputStream()
+            every { process.outputStream } returns output
+            every { process.isAlive } returns true
+            every { process.waitFor(any(), any()) } returns true
+
+            shouldThrow<IOException> {
+                spy.writeFileSsh(emptyMap(), emptyMap(), "/path", "content")
+            }
+        }
+
+        "get remote path returns correct information" {
+            val result = server.getRemotePath(operation, "volume")
+            result shouldBe "user@host:/path/commit/data/volume/"
+        }
+
+        "push metadata writes correct contents" {
+            val spy = spyk(server)
+            every { spy.writeFileSsh(any(), any(), any(), any()) } just Runs
+            spy.pushMetadata(operation, mapOf("a" to "b"), true)
+            verify {
+                spy.writeFileSsh(any(), any(), "/path/commit/metadata.json", "{\"a\":\"b\"}")
+            }
+        }
+
+        "get rsync creates directory on push" {
+            val spy = spyk(server)
+            every { spy.runSsh(any(), any(), *anyVararg()) } returns ""
+            every { spy.getSshAuth(any(), any()) } returns Pair("password", null)
+            spy.getRsync(operation, "/src", "user@host:/path/commit/volume", executor)
+            verify {
+                spy.runSsh(any(), any(), "sudo", "mkdir", "-p", "/path/commit/volume")
+            }
+        }
+
+        "start operation does nothing" {
+            server.startOperation(operation)
+        }
+
+        "end operation does nothing" {
+            server.endOperation(operation, true)
         }
     }
 }

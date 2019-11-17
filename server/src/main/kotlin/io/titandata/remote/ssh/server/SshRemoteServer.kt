@@ -1,17 +1,25 @@
+/*
+ * Copyright The Titan Project Contributors.
+ */
+
 package io.titandata.remote.ssh.server
 
 import com.google.gson.GsonBuilder
 import com.google.gson.reflect.TypeToken
 import io.titandata.remote.RemoteOperation
-import io.titandata.remote.RemoteServer
+import io.titandata.remote.RemoteOperationType
 import io.titandata.remote.RemoteServerUtil
+import io.titandata.remote.rsync.RsyncExecutor
+import io.titandata.remote.rsync.RsyncRemote
 import io.titandata.shell.CommandException
 import io.titandata.shell.CommandExecutor
 import java.io.File
+import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.attribute.PosixFilePermission
+import java.util.concurrent.TimeUnit
 
-class SshRemoteServer : RemoteServer {
+class SshRemoteServer : RsyncRemote() {
 
     internal val executor = CommandExecutor()
     internal val gson = GsonBuilder().create()
@@ -141,9 +149,7 @@ class SshRemoteServer : RemoteServer {
     override fun getCommit(remote: Map<String, Any>, parameters: Map<String, Any>, commitId: String): Map<String, Any>? {
         try {
             val json = runSsh(remote, parameters, "cat", "${remote["path"]}/$commitId/metadata.json")
-            val result : Map<String, Any> = gson.fromJson(json, object : TypeToken<Map<String, Any>>() {}.type)
-            @Suppress("UNCHECKED_CAST")
-            return result.get("properties") as Map<String, Any>
+            return gson.fromJson(json, object : TypeToken<Map<String, Any>>() {}.type)
         } catch (e: CommandException) {
             if (e.output.contains("No such file or directory")) {
                 return null
@@ -173,15 +179,58 @@ class SshRemoteServer : RemoteServer {
         return util.sortDescending(commits)
     }
 
+    /**
+     * Write to a file over SSH. While there are certainly ways to do this natively in java, we keep it simple
+     * and just use command line tools as we are elsewhere.
+     */
+    fun writeFileSsh(remote: Map<String, Any>, params: Map<String, Any>, path: String, content: String) {
+        val file = createTempFile()
+        file.deleteOnExit()
+        try {
+            val args = buildSshCommand(remote, params, file, true, "sh", "-c", "cat > $path")
+            val process = executor.start(*args.toTypedArray())
+            val writer = process.outputStream.bufferedWriter()
+            writer.write(content)
+            writer.close()
+            process.outputStream.close()
+            process.waitFor(10L, TimeUnit.SECONDS)
+
+            if (process.isAlive) {
+                throw IOException("Timed out waiting for command: $args")
+            }
+            executor.checkResult(process)
+        } finally {
+            file.delete()
+        }
+    }
+
     override fun endOperation(operation: RemoteOperation, isSuccessful: Boolean) {
-        throw NotImplementedError()
+        // Nothing to do
     }
 
     override fun startOperation(operation: RemoteOperation) {
-        throw NotImplementedError()
+        // Nothing to do
     }
 
-    override fun syncVolume(operation: RemoteOperation, volumeName: String, volumeDescription: String, volumePath: String, scratchPath: String) {
-        throw NotImplementedError()
+    override fun getRemotePath(operation: RemoteOperation, volume: String): String {
+        val remoteDir = "${operation.remote["path"]}/${operation.commitId}/data/$volume"
+        return "${operation.remote["username"]}@${operation.remote["address"]}:$remoteDir/"
+    }
+
+    override fun getRsync(operation: RemoteOperation, src: String, dst: String, executor: CommandExecutor): RsyncExecutor {
+        if (operation.type == RemoteOperationType.PUSH) {
+            val remoteDir = dst.substringAfter(":")
+            runSsh(operation.remote, operation.parameters, "sudo", "mkdir", "-p", remoteDir)
+        }
+
+        val (password, key) = getSshAuth(operation.remote, operation.parameters)
+        return RsyncExecutor(operation.updateProgress, operation.remote["port"] as Int?, password,
+                key, "$src/", dst, executor)
+    }
+
+    override fun pushMetadata(operation: RemoteOperation, commit: Map<String, Any>, isUpdate: Boolean) {
+        val json = gson.toJson(commit)
+        writeFileSsh(operation.remote, operation.parameters,
+                "${operation.remote["path"]}/${operation.commitId}/metadata.json", json)
     }
 }
