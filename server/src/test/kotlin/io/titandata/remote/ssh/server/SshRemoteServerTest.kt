@@ -57,6 +57,7 @@ class SshRemoteServerTest : StringSpec() {
             parameters = mapOf("password" to "password"),
             operationId = "operation",
             commitId = "commit",
+            commit = null,
             type = RemoteOperationType.PUSH,
             data = null
     )
