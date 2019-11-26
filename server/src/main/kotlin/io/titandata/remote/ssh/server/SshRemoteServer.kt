@@ -204,20 +204,20 @@ class SshRemoteServer : RsyncRemote() {
         }
     }
 
-    override fun endOperation(operation: RemoteOperation, isSuccessful: Boolean) {
+    override fun syncDataEnd(operation: RemoteOperation, operationData: Any?, isSuccessful: Boolean) {
         // Nothing to do
     }
 
-    override fun startOperation(operation: RemoteOperation) {
+    override fun syncDataStart(operation: RemoteOperation) {
         // Nothing to do
     }
 
-    override fun getRemotePath(operation: RemoteOperation, volume: String): String {
+    override fun getRemotePath(operation: RemoteOperation, operationData: Any?, volume: String): String {
         val remoteDir = "${operation.remote["path"]}/${operation.commitId}/data/$volume"
         return "${operation.remote["username"]}@${operation.remote["address"]}:$remoteDir/"
     }
 
-    override fun getRsync(operation: RemoteOperation, src: String, dst: String, executor: CommandExecutor): RsyncExecutor {
+    override fun getRsync(operation: RemoteOperation, operationData: Any?, src: String, dst: String, executor: CommandExecutor): RsyncExecutor {
         if (operation.type == RemoteOperationType.PUSH) {
             val remoteDir = dst.substringAfter(":")
             runSsh(operation.remote, operation.parameters, "sudo", "mkdir", "-p", remoteDir)

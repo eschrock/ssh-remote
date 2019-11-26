@@ -58,8 +58,7 @@ class SshRemoteServerTest : StringSpec() {
             operationId = "operation",
             commitId = "commit",
             commit = null,
-            type = RemoteOperationType.PUSH,
-            data = null
+            type = RemoteOperationType.PUSH
     )
 
     private fun mockFile(): File {
@@ -310,7 +309,7 @@ class SshRemoteServerTest : StringSpec() {
         }
 
         "get remote path returns correct information" {
-            val result = server.getRemotePath(operation, "volume")
+            val result = server.getRemotePath(operation, null, "volume")
             result shouldBe "user@host:/path/commit/data/volume/"
         }
 
@@ -327,18 +326,18 @@ class SshRemoteServerTest : StringSpec() {
             val spy = spyk(server)
             every { spy.runSsh(any(), any(), *anyVararg()) } returns ""
             every { spy.getSshAuth(any(), any()) } returns Pair("password", null)
-            spy.getRsync(operation, "/src", "user@host:/path/commit/volume", executor)
+            spy.getRsync(operation, null, "/src", "user@host:/path/commit/volume", executor)
             verify {
                 spy.runSsh(any(), any(), "sudo", "mkdir", "-p", "/path/commit/volume")
             }
         }
 
-        "start operation does nothing" {
-            server.startOperation(operation)
+        "sync data start does nothing" {
+            server.syncDataStart(operation)
         }
 
-        "end operation does nothing" {
-            server.endOperation(operation, true)
+        "sync data end does nothing" {
+            server.syncDataEnd(operation, null, true)
         }
     }
 }
