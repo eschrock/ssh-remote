@@ -220,7 +220,7 @@ class SshRemoteServer : RsyncRemote() {
     override fun getRsync(operation: RemoteOperation, operationData: Any?, src: String, dst: String, executor: CommandExecutor): RsyncExecutor {
         if (operation.type == RemoteOperationType.PUSH) {
             val remoteDir = dst.substringAfter(":")
-            runSsh(operation.remote, operation.parameters, "sudo", "mkdir", "-p", remoteDir)
+            runSsh(operation.remote, operation.parameters, "mkdir", "-p", remoteDir)
         }
 
         val (password, key) = getSshAuth(operation.remote, operation.parameters)
