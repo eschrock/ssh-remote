@@ -328,7 +328,7 @@ class SshRemoteServerTest : StringSpec() {
             every { spy.getSshAuth(any(), any()) } returns Pair("password", null)
             spy.getRsync(operation, null, "/src", "user@host:/path/commit/volume", executor)
             verify {
-                spy.runSsh(any(), any(), "sudo", "mkdir", "-p", "/path/commit/volume")
+                spy.runSsh(any(), any(), "mkdir", "-p", "/path/commit/volume")
             }
         }
 
